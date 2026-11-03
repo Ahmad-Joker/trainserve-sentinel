@@ -1,0 +1,35 @@
+name: Python CI
+on:
+  push:
+  pull_request:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.10', '3.12', '3.13']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Compile
+        run: python -m compileall -q src tests
+      - name: Unit and integration tests
+        env:
+          PYTHONPATH: src
+        run: python -m unittest discover -s tests -v
+      - name: End-to-end baseline and clean scan
+        env:
+          PYTHONPATH: src
+        run: |
+          python -m trainserve_sentinel baseline --csv samples/baseline.csv --out artifacts/baseline.json --label label --prediction prediction
+          python -m trainserve_sentinel scan --baseline artifacts/baseline.json --csv samples/clean.csv --json artifacts/clean.json --html artifacts/clean.html
+      - name: End-to-end shifted scan must block
+        env:
+          PYTHONPATH: src
+        run: |
+          set +e
+          python -m trainserve_sentinel scan --baseline artifacts/baseline.json --csv samples/shifted.csv --json artifacts/shifted.json --html artifacts/shifted.html
+          code=$?
+          test "$code" -eq 2
